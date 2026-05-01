@@ -13,7 +13,7 @@ import torchaudio
 warnings.filterwarnings("ignore", category=UserWarning)
 
 OUTPUT_SRT = "results/srt/subtitulos.srt"
-OUTPUT_JSON = "results/logs/diarizacion_data.json"
+OUTPUT_VIDEO = "results/videos/video_subtitulado.mp4"
 AUDIO_TMP = "data/audio/audio_tmp.wav"
 
 def extraer_audio(video_path, salida=AUDIO_TMP):
@@ -38,9 +38,10 @@ def cargar_pipeline(token):
     return pipeline
 
 def diarizar_audio(audio_path, pipeline):
-    print("\n[2/4] Diarizando audio...")
+    print("\n[2/5] Diarizando audio...")
     with ProgressHook() as hook:
         diarizacion = pipeline(audio_path, hook=hook)
+
     segmentos = []
     for turno, _, hablante in diarizacion.itertracks(yield_label=True):
         segmentos.append({
@@ -49,11 +50,13 @@ def diarizar_audio(audio_path, pipeline):
             "fin": round(turno.end, 3),
             "duracion": round(turno.end - turno.start, 3)
         })
+
     print(f"Segmentos: {len(segmentos)}")
     return segmentos
 
 def fusionar_con_visual(segmentos_audio, lip_data):
     visual_por_persona = {}
+
     for pid_str, serie in lip_data["lar_series"].items():
         pid = int(pid_str)
         tiempos = np.array(serie["tiempos"])
@@ -63,14 +66,17 @@ def fusionar_con_visual(segmentos_audio, lip_data):
         visual_por_persona[pid] = (tiempos, hablando)
 
     votos = {}
+
     for seg in segmentos_audio:
         sp = seg["speaker"]
         t0, t1 = seg["inicio"], seg["fin"]
         votos.setdefault(sp, {})
+
         for pid, (tiempos, hablando) in visual_por_persona.items():
             mask = (tiempos >= t0) & (tiempos <= t1)
             total = np.sum(mask)
             activos = np.sum(hablando[mask])
+
             if total > 0:
                 ratio = activos / total
                 votos[sp][pid] = votos[sp].get(pid, 0) + ratio
@@ -86,7 +92,7 @@ def fusionar_con_visual(segmentos_audio, lip_data):
     return segmentos_audio, mapeo
 
 def transcribir_segmentos(segmentos, audio_array, sr, modelo):
-    print("\n[3/4] Transcribiendo...")
+    print("\n[3/5] Transcribiendo...")
     model = whisper.load_model(modelo)
 
     for i, seg in enumerate(segmentos):
@@ -115,18 +121,44 @@ def segundos_a_srt(seg):
 
 def generar_srt(segmentos, mapeo):
     os.makedirs(os.path.dirname(OUTPUT_SRT), exist_ok=True)
+
     with open(OUTPUT_SRT, "w", encoding="utf-8") as f:
         idx = 1
         for seg in segmentos:
             texto = seg.get("texto", "").strip()
             if not texto:
                 continue
+
             inicio = segundos_a_srt(seg["inicio"])
             fin = segundos_a_srt(seg["fin"])
+
             pid = mapeo.get(seg["speaker"], -1)
-            etiqueta = f"[Persona {pid}]" if pid >= 0 else "[?]"
-            f.write(f"{idx}\n{inicio} --> {fin}\n{etiqueta}: {texto}\n\n")
+            etiqueta = f"Persona {pid}:" if pid >= 0 else ""
+
+            f.write(f"{idx}\n{inicio} --> {fin}\n{etiqueta} {texto}\n\n")
             idx += 1
+
+def generar_video_con_subtitulos(video_input):
+    os.makedirs(os.path.dirname(OUTPUT_VIDEO), exist_ok=True)
+
+    srt_path = os.path.abspath(OUTPUT_SRT)
+
+    srt_path = srt_path.replace("\\", "\\\\")
+    srt_path = srt_path.replace(":", "\\:")
+
+    estilo = "Fontsize=28,PrimaryColour=&Hffffff&,OutlineColour=&H000000&,BorderStyle=3,Outline=2,Shadow=3,Alignment=2"
+
+    filtro = f"subtitles='{srt_path}':force_style='{estilo}'"
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_input,
+        "-vf", filtro,
+        "-c:a", "copy",
+        OUTPUT_VIDEO
+    ]
+
+    subprocess.run(cmd)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -134,12 +166,13 @@ def main():
     parser.add_argument("--json", required=True)
     parser.add_argument("--token", required=True)
     parser.add_argument("--modelo", default="base")
+
     args = parser.parse_args()
 
     with open(args.json) as f:
         lip_data = json.load(f)
 
-    print("\n[1/4] Extrayendo audio...")
+    print("\n[1/5] Extrayendo audio...")
     audio_path = extraer_audio(args.video)
 
     pipeline = cargar_pipeline(args.token)
@@ -150,10 +183,13 @@ def main():
     audio_array, sr = cargar_audio_array(audio_path)
     segmentos = transcribir_segmentos(segmentos, audio_array, sr, args.modelo)
 
-    print("\n[4/4] Generando SRT...")
+    print("\n[4/5] Generando SRT...")
     generar_srt(segmentos, mapeo)
 
-    print("\nProceso completo")
+    print("\n[5/5] Generando video con subtítulos...")
+    generar_video_con_subtitulos(args.video)
+
+    print(f"\nVideo final: {OUTPUT_VIDEO}")
 
 if __name__ == "__main__":
     main()
