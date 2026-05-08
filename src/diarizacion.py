@@ -12,6 +12,17 @@ import torchaudio
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
+
+def _leer_token_env(path=".env"):
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("TOKEN"):
+                return line.split("=", 1)[1].strip()
+    return None
+
 OUTPUT_SRT = "results/srt/subtitulos.srt"
 OUTPUT_VIDEO = "results/videos/video_subtitulado.mp4"
 AUDIO_TMP = "data/audio/audio_tmp.wav"
@@ -164,10 +175,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", required=True)
     parser.add_argument("--json", required=True)
-    parser.add_argument("--token", required=True)
+    parser.add_argument("--token", default=None)
     parser.add_argument("--modelo", default="base")
 
     args = parser.parse_args()
+
+    if args.token is None:
+        args.token = _leer_token_env()
+    if not args.token:
+        raise ValueError("No se encontró token. Agrégalo en .env (TOKEN=hf_...) o pásalo con --token")
 
     with open(args.json) as f:
         lip_data = json.load(f)

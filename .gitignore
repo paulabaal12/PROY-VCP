@@ -15,3 +15,5 @@ __pycache__/
 
 data/videos/video_2.mp4
 results/videos/*
+data/audio/*
+results/srt/*
