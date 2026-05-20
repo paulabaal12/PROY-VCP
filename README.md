@@ -44,3 +44,7 @@ python src/diarizacion.py --video data/videos/video.mp4 --json data/json/lip_tra
 ## Descripción de los scripts
 - **lip_tracking.py**: Detecta rostros y movimiento de labios, exporta resultados a JSON y genera video anotado.
 - **diarizacion.py**: Diarización de audio, fusión con señal visual, transcripción y generación de subtítulos.
+
+```bash
+python main.py --video data/videos/<nombre del archivo>.mp4 --token hf_cXXX
+```

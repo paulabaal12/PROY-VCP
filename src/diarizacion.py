@@ -40,11 +40,10 @@ def cargar_audio_array(audio_path):
     return waveform.squeeze().numpy(), sr
 
 def cargar_pipeline(token):
-    pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1",
-        use_auth_token=token
-    )
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    from huggingface_hub import login
+    login(token=token)
+    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1")
+    device = device = "cpu"
     pipeline.to(torch.device(device))
     return pipeline
 
@@ -165,7 +164,7 @@ def generar_video_con_subtitulos(video_input):
         "ffmpeg", "-y",
         "-i", video_input,
         "-vf", filtro,
-        "-c:a", "copy",
+        "-c:a", "aac",
         OUTPUT_VIDEO
     ]
 
