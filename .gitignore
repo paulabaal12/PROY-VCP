@@ -12,8 +12,3 @@ __pycache__/
 .env
 
 /p2.py
-
-data/videos/video_2.mp4
-results/videos/*
-data/audio/*
-results/srt/*

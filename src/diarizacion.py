@@ -28,6 +28,7 @@ OUTPUT_VIDEO = "results/videos/video_subtitulado.mp4"
 AUDIO_TMP = "data/audio/audio_tmp.wav"
 
 def extraer_audio(video_path, salida=AUDIO_TMP):
+    os.makedirs(os.path.dirname(salida), exist_ok=True)  # ← agregar esto
     cmd = [
         "ffmpeg", "-y", "-i", video_path,
         "-ac", "1", "-ar", "16000", "-vn", salida

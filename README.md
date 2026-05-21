@@ -48,3 +48,11 @@ python src/diarizacion.py --video data/videos/video.mp4 --json data/json/lip_tra
 ```bash
 python main.py --video data/videos/<nombre del archivo>.mp4 --token hf_cXXX
 ```
+
+
+
+python main.py --video data/videos/video.mp4 --token hf_ze
+
+python src/render_final.py --video data/videos/video.mp4 --json data/json/lip_tracking_data.json --srt results/srt/subtitulos.srt
+
+python src/render_final.py --video data/videos/video.mp4 --json data/json/lip_tracking_data.json --srt results/srt/subtitulos.srt --metricas

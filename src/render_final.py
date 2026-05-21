@@ -7,10 +7,16 @@ import os
 
 OUTPUT_VIDEO_NOAUDIO = "results/videos/video_final_tmp.mp4"
 OUTPUT_VIDEO_FINAL   = "results/videos/video_final.mp4"
+OUTPUT_METRICAS      = "results/logs/metricas.txt"
 
 COLORS = [(0,255,100),(0,180,255),(255,80,80),(200,0,255),(255,200,0),(200,0,200)]
 LAR_THRESHOLD = 0.03
+EVAL_STEP     = 0.1   # segundos entre muestras para evaluación
 
+
+# ─────────────────────────────────────────────
+#  LECTURA DE ARCHIVOS
+# ─────────────────────────────────────────────
 
 def leer_srt(srt_path):
     subtitulos = []
@@ -33,6 +39,10 @@ def srt_a_segundos(s):
     seg, ms = rest.split(",")
     return int(h)*3600 + int(m)*60 + int(seg) + int(ms)/1000
 
+
+# ─────────────────────────────────────────────
+#  COMPOSICIÓN DEL VIDEO FINAL
+# ─────────────────────────────────────────────
 
 def obtener_subtitulo(t, subtitulos):
     for sub in subtitulos:
@@ -166,15 +176,186 @@ def agregar_audio(video_path):
     print(f"\nVideo final: {OUTPUT_VIDEO_FINAL}")
 
 
+# ─────────────────────────────────────────────
+#  EVALUACIÓN DE MÉTRICAS
+# ─────────────────────────────────────────────
+
+def extraer_personas_srt(subtitulos):
+    """
+    Del SRT generado por diarizacion.py extrae qué persona habla en cada intervalo.
+    Formato esperado en texto: 'Persona 0: blah blah' o 'Persona 1: ...'
+    Devuelve lista de {pid, inicio, fin}.
+    """
+    segmentos = []
+    for sub in subtitulos:
+        texto = sub["texto"]
+        if texto.startswith("Persona "):
+            try:
+                pid = int(texto.split(":")[0].replace("Persona", "").strip())
+                segmentos.append({"pid": pid, "inicio": sub["inicio"], "fin": sub["fin"]})
+            except ValueError:
+                pass
+    return segmentos
+
+
+def muestrear_señal(lip_data, pid, duracion, paso=EVAL_STEP):
+    """Devuelve array binario (habla=1, silencio=0) muestreado cada `paso` segundos."""
+    serie   = lip_data["lar_series"].get(str(pid))
+    if serie is None:
+        return np.array([])
+    tiempos = np.array(serie["tiempos"])
+    valores = np.array(serie["valores"])
+    ticks   = np.arange(0, duracion, paso)
+    señal   = np.zeros(len(ticks), dtype=int)
+    for k, t in enumerate(ticks):
+        idx = np.searchsorted(tiempos, t, side="right") - 1
+        if 0 <= idx < len(valores):
+            señal[k] = int(valores[idx] > LAR_THRESHOLD)
+    return señal, ticks
+
+
+def muestrear_ground_truth(segmentos_srt, pid, duracion, paso=EVAL_STEP):
+    """Devuelve array binario basado en los segmentos del SRT para la persona pid."""
+    ticks = np.arange(0, duracion, paso)
+    gt    = np.zeros(len(ticks), dtype=int)
+    for seg in segmentos_srt:
+        if seg["pid"] == pid:
+            mask = (ticks >= seg["inicio"]) & (ticks <= seg["fin"])
+            gt[mask] = 1
+    return gt
+
+
+def calcular_metricas(gt, pred):
+    """Calcula TP, FP, FN, TN y deriva Precisión, Recall, F1 y Accuracy."""
+    tp = int(np.sum((pred == 1) & (gt == 1)))
+    fp = int(np.sum((pred == 1) & (gt == 0)))
+    fn = int(np.sum((pred == 0) & (gt == 1)))
+    tn = int(np.sum((pred == 0) & (gt == 0)))
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1        = (2 * precision * recall / (precision + recall)
+                 if (precision + recall) > 0 else 0.0)
+    accuracy  = (tp + tn) / len(gt) if len(gt) > 0 else 0.0
+
+    return {"tp": tp, "fp": fp, "fn": fn, "tn": tn,
+            "precision": precision, "recall": recall,
+            "f1": f1, "accuracy": accuracy}
+
+
+def evaluar_metricas(json_path, srt_path):
+    """
+    Función principal de evaluación.
+    Compara la detección LAR (lip_tracking_data.json) contra el ground truth
+    derivado automáticamente del SRT generado por diarizacion.py.
+    """
+    print("\n" + "=" * 60)
+    print("  EVALUACIÓN DE MÉTRICAS")
+    print("=" * 60)
+
+    with open(json_path) as f:
+        lip_data = json.load(f)
+
+    subtitulos      = leer_srt(srt_path)
+    segmentos_gt    = extraer_personas_srt(subtitulos)
+    duracion        = lip_data.get("duracion_seg", 0)
+    personas        = sorted(lip_data["lar_series"].keys(), key=int)
+
+    if not segmentos_gt:
+        print("\n[!] No se encontraron etiquetas 'Persona X:' en el SRT.")
+        print("    Asegurate de que diarizacion.py generó el archivo con ese formato.")
+        return
+
+    personas_gt = sorted(set(s["pid"] for s in segmentos_gt))
+    print(f"\nDuración del video : {duracion:.1f}s")
+    print(f"Paso de muestreo   : {EVAL_STEP}s  ({int(duracion/EVAL_STEP)} muestras)")
+    print(f"Personas en SRT    : {personas_gt}")
+    print(f"Personas en JSON   : {[int(p) for p in personas]}")
+
+    resultados = {}
+
+    for pid_str in personas:
+        pid = int(pid_str)
+
+        señal_resultado = muestrear_señal(lip_data, pid, duracion)
+        if len(señal_resultado) == 0:
+            continue
+        pred, ticks = señal_resultado
+
+        gt   = muestrear_ground_truth(segmentos_gt, pid, duracion)
+        met  = calcular_metricas(gt, pred)
+        resultados[pid] = met
+
+        print(f"\n  Persona {pid}")
+        print(f"    Ground truth (SRT) habla : {np.sum(gt) * EVAL_STEP:.1f}s")
+        print(f"    Detección LAR habla      : {np.sum(pred) * EVAL_STEP:.1f}s")
+        print(f"    TP={met['tp']}  FP={met['fp']}  FN={met['fn']}  TN={met['tn']}")
+        print(f"    Precisión  : {met['precision']:.3f}")
+        print(f"    Recall     : {met['recall']:.3f}")
+        print(f"    F1-score   : {met['f1']:.3f}")
+        print(f"    Accuracy   : {met['accuracy']:.3f}")
+
+    # ── Promedio macro ──
+    if resultados:
+        prec_avg = np.mean([m["precision"] for m in resultados.values()])
+        rec_avg  = np.mean([m["recall"]    for m in resultados.values()])
+        f1_avg   = np.mean([m["f1"]        for m in resultados.values()])
+        acc_avg  = np.mean([m["accuracy"]  for m in resultados.values()])
+
+        print("\n" + "-" * 40)
+        print("  PROMEDIO MACRO (todas las personas)")
+        print(f"    Precisión  : {prec_avg:.3f}")
+        print(f"    Recall     : {rec_avg:.3f}")
+        print(f"    F1-score   : {f1_avg:.3f}")
+        print(f"    Accuracy   : {acc_avg:.3f}")
+
+    # ── Guardar reporte ──
+    os.makedirs(os.path.dirname(OUTPUT_METRICAS), exist_ok=True)
+    with open(OUTPUT_METRICAS, "w", encoding="utf-8") as f:
+        f.write("REPORTE DE MÉTRICAS — Lip Tracking vs Ground Truth (SRT)\n")
+        f.write("=" * 60 + "\n\n")
+        f.write(f"Duración        : {duracion:.1f}s\n")
+        f.write(f"Paso muestreo   : {EVAL_STEP}s\n")
+        f.write(f"Umbral LAR      : {LAR_THRESHOLD}\n\n")
+
+        for pid, met in resultados.items():
+            f.write(f"Persona {pid}\n")
+            f.write(f"  TP={met['tp']}  FP={met['fp']}  FN={met['fn']}  TN={met['tn']}\n")
+            f.write(f"  Precisión : {met['precision']:.4f}\n")
+            f.write(f"  Recall    : {met['recall']:.4f}\n")
+            f.write(f"  F1-score  : {met['f1']:.4f}\n")
+            f.write(f"  Accuracy  : {met['accuracy']:.4f}\n\n")
+
+        if resultados:
+            f.write("PROMEDIO MACRO\n")
+            f.write(f"  Precisión : {prec_avg:.4f}\n")
+            f.write(f"  Recall    : {rec_avg:.4f}\n")
+            f.write(f"  F1-score  : {f1_avg:.4f}\n")
+            f.write(f"  Accuracy  : {acc_avg:.4f}\n")
+
+    print(f"\nReporte guardado: {OUTPUT_METRICAS}")
+    print("=" * 60)
+
+
+# ─────────────────────────────────────────────
+#  PUNTO DE ENTRADA
+# ─────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--video", required=True, help="Video original")
-    parser.add_argument("--json",  required=True, help="lip_tracking_data.json")
-    parser.add_argument("--srt",   required=True, help="subtitulos.srt")
+    parser.add_argument("--video",    required=True,  help="Video original")
+    parser.add_argument("--json",     required=True,  help="lip_tracking_data.json")
+    parser.add_argument("--srt",      required=True,  help="subtitulos.srt")
+    parser.add_argument("--metricas", action="store_true",
+                        help="Solo calcular métricas, sin recomponer el video")
     args = parser.parse_args()
 
-    procesar(args.video, args.json, args.srt)
-    agregar_audio(args.video)
+    if args.metricas:
+        evaluar_metricas(args.json, args.srt)
+    else:
+        procesar(args.video, args.json, args.srt)
+        agregar_audio(args.video)
+        evaluar_metricas(args.json, args.srt)   # siempre evalúa al final
 
 
 if __name__ == "__main__":
