@@ -19,7 +19,7 @@ def main():
     parser.add_argument("--video",      required=True,          help="Ruta al video de entrada")
     parser.add_argument("--token",      required=True,          help="Token de HuggingFace (hf_...)")
     parser.add_argument("--n_personas", type=int, default=None, help="Numero esperado de personas (opcional)")
-    parser.add_argument("--modelo",     default="base",         help="Modelo Whisper: tiny, base, small, medium")
+    parser.add_argument("--modelo",     default="base",         help="Modelo Whisper: tiny, base, small, medium") 
     args = parser.parse_args()
 
     json_path = "data/json/lip_tracking_data.json"
@@ -41,6 +41,10 @@ def main():
         "--token",  args.token,
         "--modelo", args.modelo,
     ]
+    if args.min_speakers:
+        cmd2 += ["--min_speakers", str(args.min_speakers)]
+    if args.max_speakers:
+        cmd2 += ["--max_speakers", str(args.max_speakers)]
     correr(cmd2, "Paso 2/3: Diarizacion de audio y transcripcion")
 
     # Paso 3: Render final

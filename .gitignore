@@ -12,3 +12,17 @@ __pycache__/
 .env
 
 /p2.py
+
+data/videos/
+data/audio/
+results/
+*.onnx
+*.task
+*.pth
+*.model
+*.wav
+*.mp4
+*.avi
+results/videos/*
+data/audio/*
+results/srt/*

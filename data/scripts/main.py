@@ -55,7 +55,7 @@ def dibujar_subtitulo(frame, texto, w, h):
     if not texto:
         return
     font       = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.7
+    font_scale = 1
     thickness  = 2
     max_chars  = 80
     palabras   = texto.split()
@@ -348,6 +348,8 @@ def main():
     parser.add_argument("--srt",      required=True,  help="subtitulos.srt")
     parser.add_argument("--metricas", action="store_true",
                         help="Solo calcular métricas, sin recomponer el video")
+    parser.add_argument("--min_speakers", type=int, default=None)
+    parser.add_argument("--max_speakers", type=int, default=None)
     args = parser.parse_args()
 
     if args.metricas:
