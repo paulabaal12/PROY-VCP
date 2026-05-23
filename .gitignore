@@ -15,7 +15,7 @@ __pycache__/
 
 data/videos/
 data/audio/
-results/
+
 *.onnx
 *.task
 *.pth

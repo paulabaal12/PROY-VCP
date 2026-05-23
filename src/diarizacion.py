@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import warnings
 import numpy as np
+from scipy.ndimage import median_filter
 from pyannote.audio import Pipeline
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 import torch
@@ -26,6 +27,10 @@ def _leer_token_env(path=".env"):
 OUTPUT_SRT   = "results/srt/subtitulos.srt"
 OUTPUT_VIDEO = "results/videos/video_subtitulado.mp4"
 AUDIO_TMP    = "data/audio/audio_tmp.wav"
+
+# ── MEJORA 1: parámetros de suavizado y duración mínima ──────────────────────
+LAR_SMOOTH_FRAMES   = 7    # ventana del filtro de mediana (frames)
+MIN_SPEECH_DURATION = 0.3  # segundos mínimos para considerar que alguien habla
 
 
 def extraer_audio(video_path, salida=AUDIO_TMP):
@@ -72,77 +77,115 @@ def diarizar_audio(audio_path, pipeline, min_speakers=None, max_speakers=None):
     return segmentos
 
 
-def fusionar_con_visual(segmentos_audio, lip_data):
+# ── MEJORA 2: umbral adaptativo por persona ───────────────────────────────────
+def calcular_umbral_adaptativo(valores, percentil_base=70, factor=0.4, umbral_min=0.05):
     """
-    Para cada segmento de audio, identifica qué persona visual tiene
-    el LAR promedio más alto en ese intervalo de tiempo.
-    Asignación segmento a segmento — no acumulativa.
-    """
-    umbral = lip_data.get("umbral_lar", 0.03)
+    Calcula un umbral LAR personalizado para cada persona basado en
+    la distribución de sus propios valores.
 
-    # Pre-cargar series LAR por persona
+    Idea: el umbral es una fracción del percentil 70 de sus valores LAR.
+    Esto adapta el detector al rango de movimiento natural de cada persona.
+    Se impone un mínimo global de 0.03 para evitar falsos positivos en silencio.
+    """
+    if len(valores) == 0:
+        return umbral_min
+    p70 = np.percentile(valores, percentil_base)
+    umbral = max(umbral_min, p70 * factor)
+    return round(umbral, 4)
+
+
+def suavizar_lar(valores, ventana=LAR_SMOOTH_FRAMES):
+    """
+    Aplica un filtro de mediana sobre la serie LAR para eliminar
+    picos espúreos frame a frame (micro-movimientos de labios en silencio).
+    """
+    if len(valores) < ventana:
+        return valores
+    return median_filter(valores, size=ventana)
+
+def fusionar_con_visual(segmentos_audio, lip_data):
     series = {}
+    umbrales = {}
     for pid_str, serie in lip_data["lar_series"].items():
         pid = int(pid_str)
         tiempos = np.array(serie["tiempos"])
-        valores = np.array(serie["valores"])
+        valores_raw = np.array(serie["valores"])
+        valores = suavizar_lar(valores_raw)
+        umbral = calcular_umbral_adaptativo(valores)
+        umbrales[pid] = umbral
         series[pid] = (tiempos, valores)
 
-    # Para cada segmento de audio → encontrar persona con mayor LAR promedio
-    asignacion_por_segmento = []
+    print("\nUmbrales LAR adaptativos por persona:")
+    for pid, u in sorted(umbrales.items()):
+        print(f"  Persona {pid} → umbral = {u:.4f}")
+
+    # Score acumulado por (speaker_audio, pid_visual)
+    scores_acum = {}
+    conteos     = {}
 
     for seg in segmentos_audio:
         t0, t1 = seg["inicio"], seg["fin"]
-        mejor_pid   = -1
-        mejor_score = -1.0
+        sp = seg["speaker"]
 
         for pid, (tiempos, valores) in series.items():
             mask  = (tiempos >= t0) & (tiempos <= t1)
-            total = np.sum(mask)
-            if total == 0:
+            if np.sum(mask) == 0:
                 continue
+            media = np.mean(valores)
+            std   = np.std(valores) + 1e-6
+            score = np.mean((valores[mask] - media) / std)
+            key   = (sp, pid)
+            scores_acum[key] = scores_acum.get(key, 0.0) + score
+            conteos[key]     = conteos.get(key, 0) + 1
 
-            # Score = LAR promedio en el intervalo (no solo binario hablando/no)
-            media_persona = np.mean(valores)
-            std_persona = np.std(valores) + 1e-6
-            lar_normalizado = np.mean((valores[mask] - media_persona) / std_persona)
-            lar_promedio = lar_normalizado
+    # Normalizar scores
+    scores_norm = {k: v / conteos[k] for k, v in scores_acum.items()}
 
-            if lar_promedio > mejor_score:
-                mejor_score = lar_promedio
-                mejor_pid   = pid
+    speakers  = sorted(set(seg["speaker"] for seg in segmentos_audio))
+    pids_vis  = sorted(series.keys())
 
-        asignacion_por_segmento.append(mejor_pid)
-        seg["persona_visual"] = mejor_pid
-
-    # Construir mapeo speaker_audio → pid_visual
-    # Un speaker de audio puede aparecer en varios segmentos;
-    # tomamos el pid visual más frecuente entre sus segmentos
-    votos_speaker = {}
-    for seg, pid in zip(segmentos_audio, asignacion_por_segmento):
-        sp = seg["speaker"]
-        votos_speaker.setdefault(sp, {})
-        votos_speaker[sp][pid] = votos_speaker[sp].get(pid, 0) + 1
-
+    # Asignación greedy: el mejor par (speaker, pid) que no repita pid
+    asignados_pid = set()
     mapeo = {}
-    for sp, conteos in votos_speaker.items():
-        # Ignorar pid=-1 si hay otras opciones
-        conteos_validos = {p: c for p, c in conteos.items() if p >= 0}
-        if conteos_validos:
-            mapeo[sp] = max(conteos_validos, key=conteos_validos.get)
-        else:
-            mapeo[sp] = -1
 
-    # Re-asignar persona_visual usando el mapeo consolidado
+    pares_ordenados = sorted(scores_norm.items(), key=lambda x: x[1], reverse=True)
+    for (sp, pid), score in pares_ordenados:
+        if sp not in mapeo and pid not in asignados_pid:
+            mapeo[sp] = pid
+            asignados_pid.add(pid)
+
+    # Si algún speaker quedó sin asignar, darle el pid restante
+    for sp in speakers:
+        if sp not in mapeo:
+            restantes = [p for p in pids_vis if p not in asignados_pid]
+            if restantes:
+                mapeo[sp] = restantes[0]
+                asignados_pid.add(restantes[0])
+            else:
+                mapeo[sp] = -1
+
     for seg in segmentos_audio:
         seg["persona_visual"] = mapeo.get(seg["speaker"], -1)
 
-    # Debug: mostrar mapeo
     print("\nMapeo speaker audio → persona visual:")
     for sp, pid in sorted(mapeo.items()):
         print(f"  {sp} → Persona {pid}")
 
+    lip_data["umbrales_adaptativos"] = {str(k): v for k, v in umbrales.items()}
     return segmentos_audio, mapeo
+
+
+def filtrar_segmentos_cortos(segmentos, duracion_min=MIN_SPEECH_DURATION):
+    """
+    Elimina del SRT los segmentos donde la detección LAR activa dura
+    menos de `duracion_min` segundos — probablemente son ruido.
+    """
+    antes = len(segmentos)
+    filtrados = [s for s in segmentos if s.get("duracion", 0) >= duracion_min]
+    descartados = antes - len(filtrados)
+    if descartados:
+        print(f"\n  Filtrados {descartados} segmentos < {duracion_min}s (ruido)")
+    return filtrados
 
 
 def transcribir_segmentos(segmentos, audio_array, sr, modelo):
@@ -185,9 +228,9 @@ def generar_srt(segmentos, mapeo):
             if not texto:
                 continue
 
-            inicio = segundos_a_srt(seg["inicio"])
-            fin    = segundos_a_srt(seg["fin"])
-            pid    = mapeo.get(seg["speaker"], -1)
+            inicio   = segundos_a_srt(seg["inicio"])
+            fin      = segundos_a_srt(seg["fin"])
+            pid      = mapeo.get(seg["speaker"], -1)
             etiqueta = f"Persona {pid}:" if pid >= 0 else ""
 
             f.write(f"{idx}\n{inicio} --> {fin}\n{etiqueta} {texto}\n\n")
@@ -201,8 +244,8 @@ def generar_video_con_subtitulos(video_input):
     srt_path = srt_path.replace("\\", "\\\\")
     srt_path = srt_path.replace(":", "\\:")
 
-    estilo  = "Fontsize=28,PrimaryColour=&Hffffff&,OutlineColour=&H000000&,BorderStyle=3,Outline=2,Shadow=3,Alignment=2"
-    filtro  = f"subtitles='{srt_path}':force_style='{estilo}'"
+    estilo = "Fontsize=28,PrimaryColour=&Hffffff&,OutlineColour=&H000000&,BorderStyle=3,Outline=2,Shadow=3,Alignment=2"
+    filtro = f"subtitles='{srt_path}':force_style='{estilo}'"
 
     cmd = [
         "ffmpeg", "-y",
@@ -216,10 +259,10 @@ def generar_video_con_subtitulos(video_input):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--video",  required=True)
-    parser.add_argument("--json",   required=True)
-    parser.add_argument("--token",  default=None)
-    parser.add_argument("--modelo", default="base")
+    parser.add_argument("--video",        required=True)
+    parser.add_argument("--json",         required=True)
+    parser.add_argument("--token",        default=None)
+    parser.add_argument("--modelo",       default="base")
     parser.add_argument("--min_speakers", type=int, default=None)
     parser.add_argument("--max_speakers", type=int, default=None)
     args = parser.parse_args()
@@ -236,9 +279,12 @@ def main():
     audio_path = extraer_audio(args.video)
 
     pipeline  = cargar_pipeline(args.token)
-    segmentos = diarizar_audio(audio_path, pipeline, 
-                           min_speakers=args.min_speakers,
-                           max_speakers=args.max_speakers)
+    segmentos = diarizar_audio(audio_path, pipeline,
+                               min_speakers=args.min_speakers,
+                               max_speakers=args.max_speakers)
+
+    # Filtrar segmentos muy cortos antes de fusionar
+    segmentos = filtrar_segmentos_cortos(segmentos)
 
     segmentos, mapeo = fusionar_con_visual(segmentos, lip_data)
 
@@ -247,6 +293,10 @@ def main():
 
     print("\n[4/5] Generando SRT...")
     generar_srt(segmentos, mapeo)
+
+    # Guardar lip_data actualizado (con umbrales adaptativos)
+    with open(args.json, "w") as f:
+        json.dump(lip_data, f, indent=2)
 
     print("\n[5/5] Generando video con subtítulos...")
     generar_video_con_subtitulos(args.video)

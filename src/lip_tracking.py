@@ -20,16 +20,19 @@ REID_UMBRAL       = 0.65
 MIN_BBOX_W        = 25
 MIN_BBOX_H        = 25
 MAX_ASPECT_RATIO  = 2.5
-MIN_FRAMES_EXPORT = 10
-NMS_IOU_UMBRAL    = 0.2
+MIN_FRAMES_EXPORT = 5
+NMS_IOU_UMBRAL    = 0.5   # subido de 0.2 — caras cercanas no se eliminan
+MAX_DIST_TRACK    = 80    # px máximo de desplazamiento del centro entre frames
 
 OUTPUT_VIDEO = "results/videos/output_annotated.mp4"
 OUTPUT_JSON  = "data/json/lip_tracking_data.json"
 
-YUNET_PATH = "yunet.onnx"
-YUNET_URL  = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
-MODEL_PATH = "face_landmarker.task"
-MODEL_URL  = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+_DIR       = os.path.dirname(os.path.abspath(__file__))
+YUNET_PATH = os.path.join(_DIR, "..", "yunet.onnx")
+MODEL_PATH = os.path.join(_DIR, "..", "face_landmarker.task")
+
+YUNET_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 
 COLORS = [
     (0,255,100),(0,180,255),(255,80,80),
@@ -39,8 +42,6 @@ LIP_TOP, LIP_BOTTOM, LIP_LEFT, LIP_RIGHT = 13, 14, 78, 308
 LIPS_OUTER = [61,146,91,181,84,17,314,405,321,375,291,308,
               324,318,402,317,14,87,178,88,95,78,191,80,81,82]
 
-
-# ─── Utilidades ──────────────────────────────────────────────
 
 def crear_dirs():
     os.makedirs("results/videos", exist_ok=True)
@@ -56,6 +57,8 @@ def descargar_modelos():
             print(f"Descargando {nombre}...")
             urllib.request.urlretrieve(url, path)
             print(f"  OK: {path}")
+        else:
+            print(f"  {nombre} OK: {os.path.abspath(path)}")
 
 
 def calcular_lar(lm):
@@ -84,6 +87,11 @@ def iou(boxA, boxB):
     inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
     union = (ax2-ax1)*(ay2-ay1) + (bx2-bx1)*(by2-by1) - inter
     return inter / union if union > 0 else 0.0
+
+
+def centro(bbox):
+    x, y, w, h = bbox
+    return x + w / 2, y + h / 2
 
 
 def nms(caras, umbral_iou=NMS_IOU_UMBRAL):
@@ -119,58 +127,45 @@ def get_embedding(crop_bgr):
 # ─── Clustering ──────────────────────────────────────────────
 
 def clustering_kmeans(banco_embeddings, n_personas):
-    """Agrupa IDs temporales en n_personas usando K-Means."""
     from sklearn.cluster import KMeans
-
     pids = list(banco_embeddings.keys())
     if len(pids) == 0:
         return {}
     if len(pids) <= n_personas:
-        # Menos IDs que personas esperadas — asignar directo
         return {pid: i for i, pid in enumerate(pids)}
-
     embs = np.stack([banco_embeddings[p] for p in pids])
     norms = np.linalg.norm(embs, axis=1, keepdims=True)
     norms[norms < 1e-8] = 1.0
     embs_norm = embs / norms
-
     km = KMeans(n_clusters=n_personas, random_state=42, n_init=10)
     labels = km.fit_predict(embs_norm)
-
     remap = {pid: int(label) for pid, label in zip(pids, labels)}
-    print(f"\nClustering K-Means: {len(pids)} IDs temporales → {n_personas} personas")
+    print(f"\nClustering K-Means: {len(pids)} IDs → {n_personas} personas")
     return remap
 
 
 def clustering_dbscan(banco_embeddings, eps=0.7, min_samples=1):
-    """Agrupa IDs automáticamente sin saber cuántas personas hay."""
     from sklearn.cluster import DBSCAN
-
     pids = list(banco_embeddings.keys())
     if len(pids) == 0:
         return {}
-
     embs = np.stack([banco_embeddings[p] for p in pids])
     norms = np.linalg.norm(embs, axis=1, keepdims=True)
     norms[norms < 1e-8] = 1.0
     embs_norm = embs / norms
-
     db = DBSCAN(eps=eps, min_samples=min_samples, metric="cosine")
     labels = db.fit_predict(embs_norm)
-
     remap = {}
     next_outlier = max(labels) + 1
     for pid, label in zip(pids, labels):
         remap[pid] = next_outlier if label == -1 else label
         if label == -1:
             next_outlier += 1
-
     valores_unicos = sorted(set(remap.values()))
     renumber = {v: i for i, v in enumerate(valores_unicos)}
     remap = {pid: renumber[v] for pid, v in remap.items()}
-
     n_personas = len(set(remap.values()))
-    print(f"\nClustering DBSCAN: {len(pids)} IDs temporales → {n_personas} personas")
+    print(f"\nClustering DBSCAN: {len(pids)} IDs → {n_personas} personas")
     return remap
 
 
@@ -178,7 +173,6 @@ def remap_historiales(hist_lar, hist_t, hist_bbox, remap):
     new_lar  = defaultdict(list)
     new_t    = defaultdict(list)
     new_bbox = defaultdict(list)
-
     for pid_tmp, pid_final in remap.items():
         if pid_tmp in hist_lar:
             combined = sorted(
@@ -189,13 +183,11 @@ def remap_historiales(hist_lar, hist_t, hist_bbox, remap):
                 new_t[pid_final].append(t)
                 new_lar[pid_final].append(lar)
                 new_bbox[pid_final].append(bbox)
-
     for pid in new_t:
         orden = np.argsort(new_t[pid])
         new_t[pid]    = [new_t[pid][i]    for i in orden]
         new_lar[pid]  = [new_lar[pid][i]  for i in orden]
         new_bbox[pid] = [new_bbox[pid][i] for i in orden]
-
     return new_lar, new_t, new_bbox
 
 
@@ -210,6 +202,8 @@ def procesar_video(video_path):
     sx, sy = orig_w / PROCESS_W, orig_h / PROCESS_H
 
     print(f"{orig_w}x{orig_h} | {fps:.1f} fps | {total} frames")
+    print(f"yunet.onnx     : {os.path.abspath(YUNET_PATH)}  existe={os.path.exists(YUNET_PATH)}")
+    print(f"face_landmarker: {os.path.abspath(MODEL_PATH)}  existe={os.path.exists(MODEL_PATH)}")
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(OUTPUT_VIDEO, fourcc, fps, (orig_w, orig_h))
@@ -222,12 +216,12 @@ def procesar_video(video_path):
 
     yunet = cv2.FaceDetectorYN.create(
         YUNET_PATH, "", (PROCESS_W, PROCESS_H),
-        score_threshold=0.6, top_k=MAX_FACES
+        score_threshold=0.4, top_k=MAX_FACES
     )
 
     lm_options = mp_vision.FaceLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=MODEL_PATH),
-        num_faces=1,
+        num_faces=2,
         min_face_detection_confidence=0.1,
         min_face_presence_confidence=0.1,
         min_tracking_confidence=0.1,
@@ -237,6 +231,9 @@ def procesar_video(video_path):
 
     caras_prev = {}
     next_pid   = 0
+    frames_con_caras     = 0
+    frames_con_landmarks = 0
+    frames_sin_landmarks = 0
 
     for i in tqdm(range(total), desc="Procesando"):
         ret, frame = cap.read()
@@ -257,17 +254,25 @@ def procesar_video(video_path):
                     caras_curr.append([x, y, w, h])
         caras_curr = nms(caras_curr)
 
-        # ── 2. Tracking por IoU ──────────────────────────────
+        if caras_curr:
+            frames_con_caras += 1
+
+        # ── 2. Tracking por IoU + distancia de centro ────────
         asignados  = {}
         usados_pid = set()
         usados_det = set()
 
         pares = []
         for pid, bbox_prev in caras_prev.items():
+            cx_prev, cy_prev = centro(bbox_prev)
             for j, bbox_curr in enumerate(caras_curr):
-                score = iou(bbox_prev, bbox_curr)
-                if score > 0.3:
-                    pares.append((score, pid, j))
+                cx_curr, cy_curr = centro(bbox_curr)
+                dist = np.sqrt((cx_prev - cx_curr)**2 + (cy_prev - cy_curr)**2)
+                score_iou = iou(bbox_prev, bbox_curr)
+                # Match si IoU > 0.1 O si el centro se movió menos de MAX_DIST_TRACK px
+                if score_iou > 0.1 or dist < MAX_DIST_TRACK:
+                    score_combinado = score_iou + max(0, 1 - dist / MAX_DIST_TRACK)
+                    pares.append((score_combinado, pid, j))
         pares.sort(reverse=True)
 
         for score, pid, j in pares:
@@ -297,7 +302,6 @@ def procesar_video(video_path):
                     if sim > mejor_sim:
                         mejor_sim = sim
                         mejor_pid = pid_b
-
                 if mejor_sim >= REID_UMBRAL:
                     pid = mejor_pid
                     n = conteos_emb[pid]
@@ -324,7 +328,7 @@ def procesar_video(video_path):
                 continue
             x, y, w, h = caras_curr[idx]
 
-            margen = int(min(w, h) * 0.15)
+            margen = int(min(w, h) * 0.3)
             x1c = max(0, x-margen);           y1c = max(0, y-margen)
             x2c = min(PROCESS_W, x+w+margen); y2c = min(PROCESS_H, y+h+margen)
             crop_small = small[y1c:y2c, x1c:x2c]
@@ -337,6 +341,7 @@ def procesar_video(video_path):
 
             lar = 0.0
             if res.face_landmarks:
+                frames_con_landmarks += 1
                 lm  = res.face_landmarks[0]
                 lar = calcular_lar(lm)
                 ch, cw = y2c - y1c, x2c - x1c
@@ -344,6 +349,8 @@ def procesar_video(video_path):
                     lx = int(lm[li].x * cw * sx) + int(x1c * sx)
                     ly = int(lm[li].y * ch * sy) + int(y1c * sy)
                     cv2.circle(frame, (lx, ly), 2, COLORS[pid % len(COLORS)], -1)
+            else:
+                frames_sin_landmarks += 1
 
             hablando = lar > LAR_THRESHOLD
             color    = COLORS[pid % len(COLORS)]
@@ -356,14 +363,12 @@ def procesar_video(video_path):
 
             grosor = 3 if hablando else 1
             cv2.rectangle(frame, (ox1, oy1), (ox2, oy2), color, grosor)
-
             label = f"P{pid} {'HABLA' if hablando else '...'} {lar:.3f}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
             ly_label = max(oy1 - 8, 18)
             cv2.rectangle(frame, (ox1, ly_label-th-4), (ox1+tw+4, ly_label+4), (0,0,0), -1)
             cv2.putText(frame, label, (ox1+2, ly_label),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
-
             barra_max = 80
             barra_val = min(int(lar / 0.12 * barra_max), barra_max)
             cv2.rectangle(frame, (ox1, oy2+4), (ox1+barra_max, oy2+14), (40,40,40), -1)
@@ -373,12 +378,23 @@ def procesar_video(video_path):
                       if historial_lar[pid] and historial_lar[pid][-1] > LAR_THRESHOLD)
         cv2.putText(frame, f"t={t:.1f}s | caras={len(caras_curr)} | hablan={n_habla}",
                     (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (220,220,220), 2)
-
         writer.write(frame)
 
     cap.release()
     writer.release()
     landmarker.close()
+
+    print(f"\n[DIAGNÓSTICO]")
+    print(f"  Frames totales        : {total}")
+    print(f"  Frames con caras      : {frames_con_caras}")
+    print(f"  Frames con landmarks  : {frames_con_landmarks}")
+    print(f"  Frames sin landmarks  : {frames_sin_landmarks}")
+    print(f"  IDs acumulados        : {len(historial_lar)}")
+    top10 = sorted(historial_lar.keys(), key=lambda p: len(historial_lar[p]), reverse=True)[:10]
+    for pid in top10:
+        n = len(historial_lar[pid])
+        lares = historial_lar[pid]
+        print(f"  pid={pid}: {n} frames, lar_max={max(lares):.4f}, lar_mean={sum(lares)/n:.4f}")
 
     return historial_lar, historial_t, historial_bbox, fps, total, banco_emb
 
@@ -389,12 +405,45 @@ def exportar(hist_lar, hist_t, hist_bbox, fps, total, video, banco_emb, n_person
     pids_validos   = {pid for pid in hist_lar if len(hist_lar[pid]) >= MIN_FRAMES_EXPORT}
     banco_filtrado = {pid: emb for pid, emb in banco_emb.items() if pid in pids_validos}
 
-    if n_personas is not None:
-        remap = clustering_kmeans(banco_filtrado, n_personas)
-    else:
-        remap = clustering_dbscan(banco_filtrado, eps=0.7, min_samples=1)
+    print(f"\n[EXPORTAR] pids válidos: {len(pids_validos)}, con embedding: {len(banco_filtrado)}")
 
-    remap_valido = {pid: remap[pid] for pid in pids_validos if pid in remap}
+    if len(banco_filtrado) == 0:
+        n = n_personas if n_personas is not None else 2
+        print(f"[EXPORTAR] Sin embeddings — agrupando por posición X en {n} personas")
+
+        centros_x = {}
+        for pid in pids_validos:
+            bboxes = hist_bbox[pid]
+            if bboxes:
+                cx = np.mean([(b[0] + b[2]) / 2 for b in bboxes])
+                centros_x[pid] = cx
+
+        from sklearn.cluster import KMeans
+        pids_list = list(centros_x.keys())
+        X = np.array([[centros_x[p]] for p in pids_list])
+        km = KMeans(n_clusters=n, random_state=42, n_init=10)
+        labels = km.fit_predict(X)
+
+        centros_cluster = {i: np.mean(X[labels == i]) for i in range(n)}
+        orden = sorted(centros_cluster.keys(), key=lambda i: centros_cluster[i])
+        cluster_a_pid_final = {cluster: pid_final for pid_final, cluster in enumerate(orden)}
+
+        remap_valido = {pid: cluster_a_pid_final[labels[i]]
+                        for i, pid in enumerate(pids_list)}
+
+        print(f"[EXPORTAR] Resultado:")
+        for pid_final in range(n):
+            pids_en_cluster = [p for p, pf in remap_valido.items() if pf == pid_final]
+            frames_total = sum(len(hist_lar[p]) for p in pids_en_cluster)
+            cx_avg = np.mean([centros_x[p] for p in pids_en_cluster])
+            print(f"  Persona {pid_final}: {len(pids_en_cluster)} PIDs, "
+                  f"{frames_total} frames, centro_x={cx_avg:.0f}px")
+    else:
+        if n_personas is not None:
+            remap = clustering_kmeans(banco_filtrado, n_personas)
+        else:
+            remap = clustering_dbscan(banco_filtrado, eps=0.7, min_samples=1)
+        remap_valido = {pid: remap[pid] for pid in pids_validos if pid in remap}
 
     hist_lar_f, hist_t_f, hist_bbox_f = remap_historiales(
         hist_lar, hist_t, hist_bbox, remap_valido
@@ -426,8 +475,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--video",      required=True)
     parser.add_argument("--umbral",     type=float, default=LAR_THRESHOLD)
-    parser.add_argument("--n_personas", type=int,   default=None,
-                        help="Número de personas en el video (usa K-Means). Si no se pasa, usa DBSCAN automático.")
+    parser.add_argument("--n_personas", type=int,   default=None)
     args = parser.parse_args()
     LAR_THRESHOLD = args.umbral
 

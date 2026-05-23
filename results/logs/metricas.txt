@@ -3,24 +3,25 @@ REPORTE DE MÉTRICAS — Lip Tracking vs Ground Truth (SRT)
 
 Duración        : 150.0s
 Paso muestreo   : 0.1s
-Umbral LAR      : 0.03
+Umbral global   : 0.03
+Umbrales adapt. : {'0': 0.0969, '1': 0.0573}
 
 Persona 0
-  TP=383  FP=280  FN=52  TN=786
-  Precisión : 0.5777
-  Recall    : 0.8805
-  F1-score  : 0.6976
-  Accuracy  : 0.7788
+  TP=701  FP=94  FN=293  TN=413
+  Precisión : 0.8818
+  Recall    : 0.7052
+  F1-score  : 0.7837
+  Accuracy  : 0.7422
 
 Persona 1
-  TP=909  FP=212  FN=85  TN=295
-  Precisión : 0.8109
-  Recall    : 0.9145
-  F1-score  : 0.8596
-  Accuracy  : 0.8021
+  TP=375  FP=241  FN=60  TN=825
+  Precisión : 0.6088
+  Recall    : 0.8621
+  F1-score  : 0.7136
+  Accuracy  : 0.7995
 
 PROMEDIO MACRO
-  Precisión : 0.6943
-  Recall    : 0.8975
-  F1-score  : 0.7786
-  Accuracy  : 0.7905
+  Precisión : 0.7453
+  Recall    : 0.7837
+  F1-score  : 0.7486
+  Accuracy  : 0.7708

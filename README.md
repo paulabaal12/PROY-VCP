@@ -49,8 +49,12 @@ python src/diarizacion.py --video data/videos/video.mp4 --json data/json/lip_tra
 python main.py --video data/videos/<nombre del archivo>.mp4 --token hf_cXXX
 ```
 
-python main.py --video data/videos/video.mp4 --token hf_ze
+python main.py --video data/videos/video.mp4 --token hf_
+
+
+python main.py --video data/videos/video.mp4 --token hf_TU_TOKEN --n_personas 2 --min_speakers 2 --max_speakers 2 --modelo base
+
+python src/diarizacion.py --video data/videos/video.mp4 --json data/json/lip_tracking_data.json --token hf_TU_TOKEN --modelo base --min_speakers 2 --max_speakers 2
 
 python src/render_final.py --video data/videos/video.mp4 --json data/json/lip_tracking_data.json --srt results/srt/subtitulos.srt
 
-python src/render_final.py --video data/videos/video.mp4 --json data/json/lip_tracking_data.json --srt results/srt/subtitulos.srt --metricas
