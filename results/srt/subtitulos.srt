@@ -1,88 +1,120 @@
 1
-00:00:00,161 --> 00:00:09,329
-Persona 0: Hi, I'm Vanessa from SpeakEnglishWithVinesa.com and today I have a special guest, my husband Dan. Hello.
+00:00:08,785 --> 00:00:10,007
+Persona 0: hey he
 
 2
-00:00:08,564 --> 00:00:09,143
-Persona 1: Hello.
+00:00:10,007 --> 00:00:11,349
+Persona 6: everybody already in the meeting?
 
 3
-00:00:09,567 --> 00:00:39,396
-Persona 0: Today we are going to be having a long English conversation because over two years ago, back in February 2020, we made this conversation and millions of you loved this and said that it helped you to immerse yourself in English and have a fun time. So today we're going to be doing something similar. We'll be talking about at least 10 possibly more topics and we'll be giving our opinions and stories and ideas.
+00:00:13,778 --> 00:00:16,664
+Persona 0: Yes sir, everybody has been meeting at the moment.
 
 4
-00:00:39,075 --> 00:00:40,008
-Persona 1: Enter
+00:00:19,277 --> 00:00:33,777
+Persona 6: Okay, good. Befor we start, let's start with introducing ourselves first. And please familiarize yourself with your teammates in this meeting. To start, I'm Josh George Gibitankar. The Chief Executive Officer of this Mapu Agar Patient.
 
 5
-00:00:39,787 --> 00:00:55,832
-Persona 0: Yes, whatever comes up along the way and there will be subtitles for key phrases down here, but you can also click CC to get the full subtitles so that you don't miss any words. All right, are you ready to get started?
+00:00:34,659 --> 00:00:41,994
+Persona 6: I will be your team leader and we're going to discuss how we're going to apply a work from home environment in this company due to this pandemic.
 
 6
-00:00:55,832 --> 00:00:56,460
-Persona 1: I'm ready.
+00:00:42,759 --> 00:00:44,423
+Persona 6: And here with us is the owner of the company.
 
 7
-00:00:56,289 --> 00:00:57,088
-Persona 0: Let's do it!
+00:00:46,222 --> 00:00:53,387
+Persona 3: Good morning to you all. I am Mr. Ahmad, the founder of this company. I am putting my trust to all of you.
 
 8
-00:01:02,283 --> 00:01:21,638
-Persona 0: But wait, before we get started, like always, I have created a free PDF worksheet for this lesson that you can download. Never forget what you are about to learn. You can click on the link in the description to download this free PDF worksheet today and you will have a chance to answer all of today's questions too.
+00:00:53,573 --> 00:00:58,633
+Persona 3: but tries to assure that amidst this pandemic we're still going to operate virtually.
 
 9
-00:01:21,739 --> 00:01:24,236
-Persona 0: Okay, are you ready for question number one?
+00:00:59,787 --> 00:01:02,826
+Persona 2: And I am Madeline and you know the Secretary of this company.
 
 10
-00:01:24,236 --> 00:01:25,814
-Persona 1: Yes, I'm ready. Why is it?
+00:01:03,573 --> 00:01:06,001
+Persona 2: Good morning, my name is Jason.
 
 11
-00:01:25,763 --> 00:01:27,189
-Persona 0: Question number one. What is it?
+00:01:06,001 --> 00:01:07,649
+Persona 5: and I am to share my necessary work.
 
 12
-00:01:26,748 --> 00:01:28,158
-Persona 1: What is the meaning of life?
+00:01:09,075 --> 00:01:12,402
+Persona 1: Also, as you all know, I am Joseph Goodee, guy.
 
 13
-00:01:28,293 --> 00:01:29,855
-Persona 0: Oh, that would be a good start.
+00:01:12,691 --> 00:01:14,423
+Persona 1: I am the Vice Chairman of the Board.
 
 14
-00:01:31,010 --> 00:01:48,667
-Persona 0: Tip to topic number one is family and I'm going to be putting the timestamps for all of these topics in the description. So if you want to rewatch any of these sections, you can easily skip to them. My first question is about family and that is what is an interesting fact about your family history?
+00:01:15,390 --> 00:01:18,905
+Persona 4: vocês in Halit Granul ng Kain Philanad bea n January 12th during the rights of Thirdtime Yiye'n ayom si higit kag sa tempang Dokomahetic air
 
 15
-00:01:48,819 --> 00:02:10,025
-Persona 1: Interesting fact. Well, I don't know too much about my mom's side of the family. I know they've been in the in the United States for a long time, but they just didn't really keep any records. But on my dad's side, on the other hand, I have a well, I had a particularly detail-oriented grandmother.
+00:01:22,504 --> 00:01:24,031
+Persona 4: I'm Ronald Estella, with pleasure.
 
 16
-00:02:09,924 --> 00:02:10,992
-Persona 0: Yes.
+00:01:24,439 --> 00:01:25,000
+Persona 4: the board.
 
 17
-00:02:10,739 --> 00:02:15,933
-Persona 1: would remember everything about her childhood and she went back and looked at.
+00:01:27,003 --> 00:01:32,165
+Persona 7: Hello and good morning to all my name is Pauline St. Patelus and I am a board member.
 
 18
-00:02:16,460 --> 00:02:23,199
-Persona 1: I don't even know how she found documents about where they came from, so her family was in Germany.
+00:01:33,743 --> 00:01:35,984
+Persona 6: may start off. Okay.
 
 19
-00:02:23,574 --> 00:02:24,762
-Persona 1: um near
+00:01:36,001 --> 00:01:46,120
+Persona 6: So, our agenda for today is to effectively employ strategies that would make the work from home scheme more effective and productive at the same time despite this pandemic.
 
 20
-00:02:25,016 --> 00:02:27,275
-Persona 1: I can't remember, I think it's Humberg.
+00:01:47,953 --> 00:01:53,998
+Persona 5: Make sure you never realize that not all of us get turned into a productive life and work scheme.
 
 21
-00:02:27,342 --> 00:02:28,192
-Persona 1: ćeee видим la
+00:01:54,168 --> 00:02:00,602
+Persona 5: However, we must continue serving our mission to keep this company thriving and ensure that our goals are still achieved.
 
 22
-00:02:28,378 --> 00:02:29,312
-Persona 1: and um
+00:02:00,941 --> 00:02:02,063
+Persona 5: Now, avoid an effort.
+
+23
+00:02:03,081 --> 00:02:08,192
+Persona 4: That's right, with that I have prepared a progress plan on how to affect the mid-practice
+
+24
+00:02:08,819 --> 00:02:09,889
+Persona 4: with crumb home skin.
+
+25
+00:02:10,008 --> 00:02:13,658
+Persona 4: and we have decided to make some compromises for the comfort of everyone.
+
+26
+00:02:14,881 --> 00:02:16,425
+Persona 1: I think that's interesting.
+
+27
+00:02:16,901 --> 00:02:19,024
+Persona 1: Why don't we take a look at your progress plan?
+
+28
+00:02:20,280 --> 00:02:23,115
+Persona 4: The progress span will be presented by our Secretary.
+
+29
+00:02:23,387 --> 00:02:26,646
+Persona 4: Missing did not take it away, it will also be our minute figure.
+
+30
+00:02:27,496 --> 00:02:29,941
+Persona 0: Thank you sir, so based on our progress plan.
 

@@ -1,6 +1,6 @@
 import yt_dlp
 
-url = "https://www.youtube.com/watch?v=LeYIndII13w"
+url = "https://www.youtube.com/watch?v=cEdKpEQfDik&t=99s"
 
 #https://www.youtube.com/watch?v=LeYIndII13w
 

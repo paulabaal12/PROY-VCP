@@ -2,8 +2,11 @@ import argparse
 import subprocess
 import sys
 import os
+import shutil
+from datetime import datetime
 
 PYTHON = sys.executable
+
 
 def correr(cmd, descripcion):
     print(f"\n{'='*55}")
@@ -14,15 +17,45 @@ def correr(cmd, descripcion):
         print(f"Error en: {descripcion}")
         sys.exit(1)
 
+
+def guardar_corrida(video_path):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    destino   = f"results/runs/{timestamp}"
+
+    os.makedirs(f"{destino}/videos", exist_ok=True)
+    os.makedirs(f"{destino}/logs",   exist_ok=True)
+    os.makedirs(f"{destino}/plots",  exist_ok=True)
+    os.makedirs(f"{destino}/srt",    exist_ok=True)
+    os.makedirs(f"{destino}/json",   exist_ok=True)
+
+    archivos = [
+        ("results/videos/video_final.mp4",  f"{destino}/videos/video_final.mp4"),
+        ("results/logs/metricas.txt",        f"{destino}/logs/metricas.txt"),
+        ("results/srt/subtitulos.srt",       f"{destino}/srt/subtitulos.srt"),
+        ("data/json/lip_tracking_data.json", f"{destino}/json/lip_tracking_data.json"),
+    ]
+    for origen, dest in archivos:
+        if os.path.exists(origen):
+            shutil.copy2(origen, dest)
+
+    if os.path.exists("results/plots"):
+        for png in os.listdir("results/plots"):
+            if png.endswith(".png"):
+                shutil.copy2(f"results/plots/{png}", f"{destino}/plots/{png}")
+
+    print(f"\n  Corrida guardada en: {destino}")
+    return destino
+
+
 def main():
     parser = argparse.ArgumentParser(description="Pipeline completo de identificacion de hablantes")
-    parser.add_argument("--video",        required=True,          help="Ruta al video de entrada")
-    parser.add_argument("--token",        required=True,          help="Token de HuggingFace (hf_...)")
-    parser.add_argument("--n_personas",   type=int, default=None, help="Numero esperado de personas (K-Means)")
-    parser.add_argument("--modelo",       default="base",         help="Modelo Whisper: tiny, base, small, medium")
-    # BUG FIX: estos argumentos existían en diarizacion.py pero no se pasaban
-    parser.add_argument("--min_speakers", type=int, default=None, help="Minimo de hablantes para pyannote")
-    parser.add_argument("--max_speakers", type=int, default=None, help="Maximo de hablantes para pyannote")
+    parser.add_argument("--video",             required=True,          help="Ruta al video de entrada")
+    parser.add_argument("--token",             default=None,           help="Token de HuggingFace (hf_...)")
+    parser.add_argument("--n_personas",        type=int, default=None, help="Numero esperado de personas (K-Means)")
+    parser.add_argument("--modelo",            default="base",         help="Modelo Whisper: tiny, base, small, medium")
+    parser.add_argument("--min_speakers",      type=int, default=None, help="Minimo de hablantes para pyannote")
+    parser.add_argument("--max_speakers",      type=int, default=None, help="Maximo de hablantes para pyannote")
+    parser.add_argument("--skip_lip_tracking", action="store_true",    help="Omitir lip tracking si ya tienes el .json")
     args = parser.parse_args()
 
     json_path = "data/json/lip_tracking_data.json"
@@ -31,10 +64,15 @@ def main():
     src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 
     # ── Paso 1: Lip tracking ─────────────────────────────────────
-    cmd1 = [PYTHON, os.path.join(src, "lip_tracking.py"), "--video", args.video]
-    if args.n_personas:
-        cmd1 += ["--n_personas", str(args.n_personas)]
-    correr(cmd1, "Paso 1/3: Deteccion de labios y tracking facial")
+    if args.skip_lip_tracking:
+        print("\n" + "="*55)
+        print("  Paso 1/3: Lip tracking omitido")
+        print("="*55)
+    else:
+        cmd1 = [PYTHON, os.path.join(src, "lip_tracking.py"), "--video", args.video]
+        if args.n_personas:
+            cmd1 += ["--n_personas", str(args.n_personas)]
+        correr(cmd1, "Paso 1/3: Deteccion de labios y tracking facial")
 
     # ── Paso 2: Diarizacion + transcripcion ──────────────────────
     cmd2 = [
@@ -44,7 +82,6 @@ def main():
         "--token",  args.token,
         "--modelo", args.modelo,
     ]
-    # BUG FIX: antes se referenciaban sin haber definido los args
     if args.min_speakers:
         cmd2 += ["--min_speakers", str(args.min_speakers)]
     if args.max_speakers:
@@ -60,12 +97,17 @@ def main():
     ]
     correr(cmd3, "Paso 3/3: Generacion del video final + metricas + graficas")
 
+    # ── Guardar trazabilidad ──────────────────────────────────────
+    destino = guardar_corrida(args.video)
+
     print("\n" + "="*55)
     print("  Pipeline completo.")
     print(f"  Video final  : results/videos/video_final.mp4")
     print(f"  Métricas     : results/logs/metricas.txt")
-    print(f"  Gráficas     : results/plots/  (6 archivos PNG)")
+    print(f"  Gráficas     : results/plots/  (7 archivos PNG)")
+    print(f"  Trazabilidad : {destino}")
     print("="*55)
+
 
 if __name__ == "__main__":
     main()

@@ -10,6 +10,16 @@ import urllib.request
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 import mediapipe as mp
+import sys
+
+def get_model_path(filename):
+    path = os.path.join(_DIR, filename)
+    if sys.platform == "win32":
+        import ctypes
+        buf = ctypes.create_unicode_buffer(32767)
+        ctypes.windll.kernel32.GetShortPathNameW(os.path.dirname(path), buf, 32767)
+        return os.path.join(buf.value, filename)
+    return path
 
 # ─── Configuración ───────────────────────────────────────────
 LAR_THRESHOLD     = 0.03
@@ -28,8 +38,8 @@ OUTPUT_VIDEO = "results/videos/output_annotated.mp4"
 OUTPUT_JSON  = "data/json/lip_tracking_data.json"
 
 _DIR       = os.path.dirname(os.path.abspath(__file__))
-YUNET_PATH = os.path.join(_DIR, "..", "yunet.onnx")
-MODEL_PATH = os.path.join(_DIR, "..", "face_landmarker.task")
+YUNET_PATH = get_model_path("yunet.onnx")
+MODEL_PATH = get_model_path("face_landmarker.task")
 
 YUNET_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"

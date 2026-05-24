@@ -113,38 +113,58 @@ def fusionar_con_visual(segmentos_audio, lip_data):
         valores = suavizar_lar(valores_raw)
         umbral = calcular_umbral_adaptativo(valores)
         umbrales[pid] = umbral
-        series[pid] = (tiempos, valores)
+        series[pid] = (tiempos, valores, umbral)
 
     print("\nUmbrales LAR adaptativos por persona:")
     for pid, u in sorted(umbrales.items()):
         print(f"  Persona {pid} → umbral = {u:.4f}")
 
-    # Score acumulado por (speaker_audio, pid_visual)
+    # Score basado en overlap de activación LAR vs segmento de audio
     scores_acum = {}
     conteos     = {}
 
     for seg in segmentos_audio:
         t0, t1 = seg["inicio"], seg["fin"]
         sp = seg["speaker"]
+        dur = t1 - t0
+        if dur <= 0:
+            continue
 
-        for pid, (tiempos, valores) in series.items():
-            mask  = (tiempos >= t0) & (tiempos <= t1)
+        for pid, (tiempos, valores, umbral) in series.items():
+            mask = (tiempos >= t0) & (tiempos <= t1)
             if np.sum(mask) == 0:
                 continue
-            media = np.mean(valores)
-            std   = np.std(valores) + 1e-6
-            score = np.mean((valores[mask] - media) / std)
-            key   = (sp, pid)
-            scores_acum[key] = scores_acum.get(key, 0.0) + score
+
+            vals_seg = valores[mask]
+
+            # Fracción de frames donde LAR supera umbral (persona claramente habla)
+            frac_activa = np.mean(vals_seg > umbral)
+
+            # Intensidad promedio solo en frames activos
+            frames_activos = vals_seg[vals_seg > umbral]
+            intensidad = np.mean(frames_activos) if len(frames_activos) > 0 else 0.0
+
+            # Score combinado: overlap * intensidad
+            score = frac_activa * (1.0 + intensidad)
+
+            key = (sp, pid)
+            scores_acum[key] = scores_acum.get(key, 0.0) + score * dur
             conteos[key]     = conteos.get(key, 0) + 1
 
-    # Normalizar scores
-    scores_norm = {k: v / conteos[k] for k, v in scores_acum.items()}
+    # Normalizar por duración total de segmentos por speaker
+    dur_total_sp = {}
+    for seg in segmentos_audio:
+        sp = seg["speaker"]
+        dur_total_sp[sp] = dur_total_sp.get(sp, 0) + (seg["fin"] - seg["inicio"])
 
-    speakers  = sorted(set(seg["speaker"] for seg in segmentos_audio))
-    pids_vis  = sorted(series.keys())
+    scores_norm = {}
+    for (sp, pid), score in scores_acum.items():
+        scores_norm[(sp, pid)] = score / max(dur_total_sp.get(sp, 1), 1e-6)
 
-    # Asignación greedy: el mejor par (speaker, pid) que no repita pid
+    speakers = sorted(set(seg["speaker"] for seg in segmentos_audio))
+    pids_vis = sorted(series.keys())
+
+    # Asignación greedy
     asignados_pid = set()
     mapeo = {}
 
@@ -169,11 +189,65 @@ def fusionar_con_visual(segmentos_audio, lip_data):
 
     print("\nMapeo speaker audio → persona visual:")
     for sp, pid in sorted(mapeo.items()):
-        print(f"  {sp} → Persona {pid}")
+        print(f"  {sp} → Persona {pid}  (score={scores_norm.get((sp, mapeo[sp]), 0):.4f})")
 
     lip_data["umbrales_adaptativos"] = {str(k): v for k, v in umbrales.items()}
     return segmentos_audio, mapeo
 
+def refinar_con_lar(segmentos_audio, lip_data, mapeo):
+    """
+    Revisa segmento por segmento y reasigna los que el LAR contradice.
+    Si en un segmento de audio el LAR de otra persona es significativamente
+    mayor que el de la persona asignada, reasigna el segmento.
+    """
+    # Invertir mapeo: pid_visual -> speaker_audio
+    mapeo_inv = {pid: sp for sp, pid in mapeo.items()}
+
+    series = {}
+    for pid_str, serie in lip_data["lar_series"].items():
+        pid = int(pid_str)
+        tiempos = np.array(serie["tiempos"])
+        valores = suavizar_lar(np.array(serie["valores"]))
+        umbral  = lip_data.get("umbrales_adaptativos", {}).get(pid_str, 0.03)
+        series[pid] = (tiempos, valores, float(umbral))
+
+    reasignados = 0
+
+    for seg in segmentos_audio:
+        t0, t1   = seg["inicio"], seg["fin"]
+        sp_actual = seg["speaker"]
+        pid_actual = mapeo.get(sp_actual, -1)
+
+        if pid_actual == -1:
+            continue
+
+        # LAR activo de la persona asignada en este segmento
+        scores_pid = {}
+        for pid, (tiempos, valores, umbral) in series.items():
+            mask = (tiempos >= t0) & (tiempos <= t1)
+            if np.sum(mask) == 0:
+                continue
+            vals = valores[mask]
+            frac_activa = np.mean(vals > umbral)
+            intensidad  = np.mean(vals[vals > umbral]) if np.any(vals > umbral) else 0.0
+            scores_pid[pid] = frac_activa * (1.0 + intensidad)
+
+        if not scores_pid:
+            continue
+
+        # Si hay otro pid con score significativamente mayor (factor 1.5x)
+        mejor_pid  = max(scores_pid, key=scores_pid.get)
+        score_actual = scores_pid.get(pid_actual, 0.0)
+        score_mejor  = scores_pid[mejor_pid]
+
+        if mejor_pid != pid_actual and score_mejor > score_actual * 1.5:
+            # Reasignar al speaker que corresponde a ese pid
+            if mejor_pid in mapeo_inv:
+                seg["speaker"] = mapeo_inv[mejor_pid]
+                reasignados += 1
+
+    print(f"\n  Refinamiento LAR: {reasignados} segmentos reasignados")
+    return segmentos_audio
 
 def filtrar_segmentos_cortos(segmentos, duracion_min=MIN_SPEECH_DURATION):
     """

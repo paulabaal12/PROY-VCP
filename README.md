@@ -58,3 +58,6 @@ python src/diarizacion.py --video data/videos/video.mp4 --json data/json/lip_tra
 
 python src/render_final.py --video data/videos/video.mp4 --json data/json/lip_tracking_data.json --srt results/srt/subtitulos.srt
 
+Para correro el pipeline sin el lip_tracking (cuando ya se generó el .json):
+python main.py --video data/videos/-nombre_del_archivo-.mp4 --token hf_xxx --skip_lip_tracking
+

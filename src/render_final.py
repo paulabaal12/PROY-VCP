@@ -584,6 +584,41 @@ def graficar_actividad_hablante(lip_data, personas, duracion):
     plt.close()
     print(f"  Guardada: {path}")
 
+def graficar_resumen_macro(resultados):
+    os.makedirs(OUTPUT_PLOTS_DIR, exist_ok=True)
+    personas  = sorted(resultados.keys())
+
+    prec_avg = np.mean([resultados[p]["precision"] for p in personas])
+    rec_avg  = np.mean([resultados[p]["recall"]    for p in personas])
+    f1_avg   = np.mean([resultados[p]["f1"]        for p in personas])
+    acc_avg  = np.mean([resultados[p]["accuracy"]  for p in personas])
+
+    etiquetas = ["Precisión", "Recall", "F1-score", "Accuracy"]
+    valores   = [prec_avg, rec_avg, f1_avg, acc_avg]
+    colores   = ["#00B4FF", "#00FF64", "#FFC800", "#FF5050"]
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    fig.patch.set_facecolor("#F8F9FA")
+    ax.set_facecolor("#F8F9FA")
+
+    bars = ax.bar(etiquetas, valores, color=colores, edgecolor="white", linewidth=0.5)
+    for bar, v in zip(bars, valores):
+        ax.text(bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.01, f"{v:.3f}",
+                ha="center", va="bottom", fontsize=12, fontweight="bold")
+
+    ax.set_ylim(0, 1.15)
+    ax.set_ylabel("Valor", fontsize=11)
+    ax.set_title("Rendimiento general del sistema (Promedio Macro)", fontsize=13, fontweight="bold")
+    ax.grid(axis="y", alpha=0.4)
+    ax.spines[["top", "right"]].set_visible(False)
+
+    plt.tight_layout()
+    path = os.path.join(OUTPUT_PLOTS_DIR, "07_resumen_macro.png")
+    plt.savefig(path, dpi=120, bbox_inches="tight")
+    plt.close()
+    print(f"  Guardada: {path}")
+
 
 def evaluar_metricas(json_path, srt_path):
     print("\n" + "=" * 60)
@@ -685,7 +720,8 @@ def evaluar_metricas(json_path, srt_path):
         graficar_distribucion_lar(lip_data, personas)
         graficar_radar_metricas(resultados)
         graficar_actividad_hablante(lip_data, personas, duracion)
-        print(f"  ✓ 6 gráficas guardadas en {OUTPUT_PLOTS_DIR}/")
+        graficar_resumen_macro(resultados)
+        print(f"  ✓ 7 gráficas guardadas en {OUTPUT_PLOTS_DIR}/")
 
     print("=" * 60)
 
