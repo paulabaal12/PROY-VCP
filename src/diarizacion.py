@@ -192,6 +192,14 @@ def fusionar_con_visual(segmentos_audio, lip_data):
         print(f"  {sp} → Persona {pid}  (score={scores_norm.get((sp, mapeo[sp]), 0):.4f})")
 
     lip_data["umbrales_adaptativos"] = {str(k): v for k, v in umbrales.items()}
+
+    # XAI: save fusion scores for explainability report
+    xai_fusion = {}
+    for (sp, pid), score in scores_norm.items():
+        xai_fusion.setdefault(sp, {})[str(pid)] = round(float(score), 6)
+    lip_data["xai_fusion_scores"] = xai_fusion
+    lip_data["xai_mapeo"] = {sp: int(pid) for sp, pid in mapeo.items()}
+
     return segmentos_audio, mapeo
 
 def refinar_con_lar(segmentos_audio, lip_data, mapeo):

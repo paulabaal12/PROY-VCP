@@ -31,6 +31,7 @@ def guardar_corrida(video_path):
     archivos = [
         ("results/videos/video_final.mp4",  f"{destino}/videos/video_final.mp4"),
         ("results/logs/metricas.txt",        f"{destino}/logs/metricas.txt"),
+        ("results/logs/xai_report.html",     f"{destino}/logs/xai_report.html"),
         ("results/srt/subtitulos.srt",       f"{destino}/srt/subtitulos.srt"),
         ("data/json/lip_tracking_data.json", f"{destino}/json/lip_tracking_data.json"),
     ]
@@ -95,7 +96,15 @@ def main():
         "--json",  json_path,
         "--srt",   srt_path,
     ]
-    correr(cmd3, "Paso 3/3: Generacion del video final + metricas + graficas")
+    correr(cmd3, "Paso 3/4: Generacion del video final + metricas + graficas")
+
+    # ── Paso 4: XAI ──────────────────────────────────────────────
+    cmd4 = [
+        PYTHON, os.path.join(src, "explainability.py"),
+        "--json", json_path,
+        "--srt",  srt_path,
+    ]
+    correr(cmd4, "Paso 4/4: Explainable AI — analisis de decisiones")
 
     # ── Guardar trazabilidad ──────────────────────────────────────
     destino = guardar_corrida(args.video)
@@ -104,7 +113,8 @@ def main():
     print("  Pipeline completo.")
     print(f"  Video final  : results/videos/video_final.mp4")
     print(f"  Métricas     : results/logs/metricas.txt")
-    print(f"  Gráficas     : results/plots/  (7 archivos PNG)")
+    print(f"  Reporte XAI  : results/logs/xai_report.html")
+    print(f"  Gráficas     : results/plots/  (10 archivos PNG)")
     print(f"  Trazabilidad : {destino}")
     print("="*55)
 

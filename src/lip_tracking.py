@@ -474,6 +474,20 @@ def exportar(hist_lar, hist_t, hist_bbox, fps, total, video, banco_emb, n_person
         }
     }
 
+    # XAI: save individual track embeddings for t-SNE visualization
+    if banco_filtrado:
+        xai_embs = []
+        for pid_tmp, emb in banco_filtrado.items():
+            pid_final = remap_valido.get(pid_tmp)
+            if pid_final is not None:
+                xai_embs.append({
+                    "track_id": int(pid_tmp),
+                    "persona":  int(pid_final),
+                    "embedding": emb.tolist()
+                })
+        if xai_embs:
+            data["xai_embeddings"] = xai_embs
+
     with open(OUTPUT_JSON, "w") as f:
         json.dump(data, f, indent=2)
     print(f"JSON guardado: {OUTPUT_JSON}  ({data['n_personas']} personas finales)")

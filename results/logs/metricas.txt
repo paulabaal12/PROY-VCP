@@ -1,69 +1,27 @@
 REPORTE DE MÉTRICAS — Lip Tracking vs Ground Truth (SRT)
 ============================================================
 
-Duración        : 150.0s
+Duración        : 300.0s
 Paso muestreo   : 0.1s
 Umbral global   : 0.03
-Umbrales adapt. : {'0': 0.05, '1': 0.05, '2': 0.05, '3': 0.05, '4': 0.05, '5': 0.05, '6': 0.05, '7': 0.05}
+Umbrales adapt. : {'0': 0.1091, '1': 0.0502}
 
 Persona 0
-  TP=0  FP=0  FN=67  TN=1433
-  Precisión : 0.0000
-  Recall    : 0.0000
-  F1-score  : 0.0000
-  Accuracy  : 0.9553
+  TP=991  FP=1238  FN=263  TN=508
+  Precisión : 0.4446
+  Recall    : 0.7903
+  F1-score  : 0.5690
+  Accuracy  : 0.4997
 
 Persona 1
-  TP=80  FP=67  FN=9  TN=1344
-  Precisión : 0.5442
-  Recall    : 0.8989
-  F1-score  : 0.6780
-  Accuracy  : 0.9493
-
-Persona 2
-  TP=0  FP=1  FN=56  TN=1443
-  Precisión : 0.0000
-  Recall    : 0.0000
-  F1-score  : 0.0000
-  Accuracy  : 0.9620
-
-Persona 3
-  TP=106  FP=35  FN=16  TN=1343
-  Precisión : 0.7518
-  Recall    : 0.8689
-  F1-score  : 0.8061
-  Accuracy  : 0.9660
-
-Persona 4
-  TP=34  FP=237  FN=182  TN=1047
-  Precisión : 0.1255
-  Recall    : 0.1574
-  F1-score  : 0.1396
-  Accuracy  : 0.7207
-
-Persona 5
-  TP=0  FP=0  FN=152  TN=1348
-  Precisión : 0.0000
-  Recall    : 0.0000
-  F1-score  : 0.0000
-  Accuracy  : 0.8987
-
-Persona 6
-  TP=294  FP=26  FN=77  TN=1103
-  Precisión : 0.9187
-  Recall    : 0.7925
-  F1-score  : 0.8509
-  Accuracy  : 0.9313
-
-Persona 7
-  TP=51  FP=12  FN=0  TN=1437
-  Precisión : 0.8095
-  Recall    : 1.0000
-  F1-score  : 0.8947
-  Accuracy  : 0.9920
+  TP=850  FP=763  FN=741  TN=646
+  Precisión : 0.5270
+  Recall    : 0.5343
+  F1-score  : 0.5306
+  Accuracy  : 0.4987
 
 PROMEDIO MACRO
-  Precisión : 0.3937
-  Recall    : 0.4647
-  F1-score  : 0.4212
-  Accuracy  : 0.9219
+  Precisión : 0.4858
+  Recall    : 0.6623
+  F1-score  : 0.5498
+  Accuracy  : 0.4992
