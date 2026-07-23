@@ -1,5 +1,9 @@
 # PROY-VCP
 
+Ejemplo de captura de habla: https://github.com/paulabaal12/PROY-VCP/blob/main/Videom.mp4
+
+Ejemplo practico: https://github.com/paulabaal12/PROY-VCP/blob/main/Final.mp4
+
 ## Estructura de Carpetas
 
 ```
@@ -61,3 +65,9 @@ python src/render_final.py --video data/videos/video.mp4 --json data/json/lip_tr
 Para correro el pipeline sin el lip_tracking (cuando ya se generó el .json):
 python main.py --video data/videos/-nombre_del_archivo-.mp4 --token hf_xxx --skip_lip_tracking
 
+
+## ⚠️ Disclaimer
+
+Este modelo fue entrenado y optimizado para video en **inglés**. Su desempeño con audio en otros idiomas puede ser inconsistente.
+
+Además, los caracteres acentuados (á, é, í, ó, ú, ñ, ü) pueden aparecer mal interpretados o codificados incorrectamente en la transcripción
